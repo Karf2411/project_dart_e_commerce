@@ -12,7 +12,7 @@ export 'models/order_model.dart';
 export 'models/user_model.dart';
 
 // قائمة المنتجات
-List<Product> products = [
+List<Product> productsList = [
   Product(
     id: '1',
     name: 'Product 1',
@@ -40,7 +40,7 @@ List<Product> products = [
 List<Order> orders = [];
 
 // قائمة المستخدمين
-List<User> users = [
+List<User> usersList = [
   User(
     name: 'User 1',
     age: 25,
@@ -61,7 +61,7 @@ List<User> users = [
 ];
 
 // قائمة المسؤولين
-List<User> admins = [
+List<User> adminsList = [
   User(
     name: 'Admin 1',
     age: 35,
@@ -85,12 +85,12 @@ List<User> admins = [
 Cart cart = Cart(items: []);
 
 // كلمة مرور تسجيل المسؤولين
-const String ADMIN_REGISTRATION_PASSWORD = 'admin_secret_123';
+const String adminRegistrationPassword = 'admin_secret_123';
 
 // دوال إدارة المستخدمين
 void addUser(String name, int age, String email, String password, String street,
     String city, String country, String phone) {
-  users.add(User(
+  usersList.add(User(
     name: name,
     age: age,
     email: email,
@@ -102,7 +102,7 @@ void addUser(String name, int age, String email, String password, String street,
 
 void addAdmin(String name, int age, String email, String password,
     String street, String city, String country, String phone) {
-  admins.add(User(
+  adminsList.add(User(
     name: name,
     age: age,
     email: email,
@@ -114,12 +114,12 @@ void addAdmin(String name, int age, String email, String password,
 
 // دوال إدارة المنتجات
 List<Product> getAllProducts() {
-  return products;
+  return productsList;
 }
 
 Product? getProductById(String id) {
   try {
-    return products.firstWhere((product) => product.id == id);
+    return productsList.firstWhere((product) => product.id == id);
   } catch (e) {
     return null;
   }
@@ -127,8 +127,8 @@ Product? getProductById(String id) {
 
 // Add new product function
 void addNewProduct(String name, double price, String description) {
-  String newId = (products.length + 1).toString();
-  products.add(Product(
+  String newId = (productsList.length + 1).toString();
+  productsList.add(Product(
     id: newId,
     name: name,
     price: price,

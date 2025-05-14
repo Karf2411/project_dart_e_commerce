@@ -2,13 +2,11 @@ import 'dart:io';
 import 'package:e_commerce/e_commerce.dart' as e_commerce;
 import 'package:e_commerce/models/order_model.dart';
 
-// Helper function to get user input
 String getInput(String message) {
   print(message);
   return stdin.readLineSync() ?? '';
 }
 
-// Helper function to get a number
 int getNumber(String message) {
   while (true) {
     try {
@@ -58,7 +56,7 @@ void loginAdmin() {
   String password = getInput('Enter admin password: ');
 
   try {
-    var admin = e_commerce.admins.firstWhere(
+    var admin = e_commerce.adminsList.firstWhere(
       (admin) => admin.email == email && admin.verifyPassword(password),
     );
     print('Welcome ${admin.name}!');
@@ -73,7 +71,7 @@ void loginUser() {
   String password = getInput('Enter user password: ');
 
   try {
-    var user = e_commerce.users.firstWhere(
+    var user = e_commerce.usersList.firstWhere(
       (user) => user.email == email && user.verifyPassword(password),
     );
     print('Welcome ${user.name}!');
@@ -87,7 +85,7 @@ void registerAdmin() {
   print('\n=== Register as Admin ===');
 
   String adminPassword = getInput('Enter admin registration password: ');
-  if (adminPassword != e_commerce.ADMIN_REGISTRATION_PASSWORD) {
+  if (adminPassword != e_commerce.adminRegistrationPassword) {
     print('Invalid admin registration password!');
     return;
   }
@@ -210,8 +208,10 @@ void showUserMenu() {
 // Admin functions
 void showProducts() {
   print('\n=== Available Products ===');
-  for (var product in e_commerce.products) {
+  for (var product in e_commerce.productsList) {
     print('${product.id}. ${product.name} - \$${product.price}');
+    print('   Description: ${product.description}');
+    print('-------------------');
   }
 }
 
@@ -245,7 +245,7 @@ void deleteProduct() {
   String id = getInput('Enter product ID: ');
   var product = e_commerce.getProductById(id);
   if (product != null) {
-    e_commerce.products.remove(product);
+    e_commerce.productsList.remove(product);
     print('Product deleted successfully!');
   } else {
     print('Product not found!');
@@ -258,18 +258,34 @@ void showOrders() {
     print('No orders found');
   } else {
     for (var order in e_commerce.orders) {
-      print(order);
+      print('\nOrder ID: ${order.id}');
+      print('Customer: ${order.customerName}');
+      print('Address: ${order.customerAddress}');
+      print('Items:');
+      for (var item in order.items) {
+        print(
+            '- ${item.product.name} x ${item.quantity} = \$${item.product.price * item.quantity}');
+      }
+      print('Total: \$${order.total}');
+      print('Status: ${order.status}');
+      print('-------------------');
     }
   }
 }
 
 void showUsers() {
   print('\n=== All Users ===');
-  if (e_commerce.users.isEmpty) {
+  if (e_commerce.usersList.isEmpty) {
     print('No users found');
   } else {
-    for (var user in e_commerce.users) {
-      print(user);
+    for (var user in e_commerce.usersList) {
+      print('\nUser ID/Email: ${user.email}');
+      print('Name: ${user.name}');
+      print('Age: ${user.age}');
+      print(
+          'Address: ${user.address.street}, ${user.address.city}, ${user.address.country}');
+      print('Phone: ${user.phone}');
+      print('-------------------');
     }
   }
 }
