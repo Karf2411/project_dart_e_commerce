@@ -1,6 +1,10 @@
 import 'dart:io';
 import 'package:e_commerce/e_commerce.dart' as e_commerce;
+import 'package:e_commerce/models/customer_model.dart';
+import 'package:e_commerce/models/product_model.dart';
 import 'package:e_commerce/models/order_model.dart';
+import 'package:e_commerce/models/order_item_model.dart';
+import 'package:hive/hive.dart';
 
 String getInput(String message) {
   print(message);
@@ -17,7 +21,56 @@ int getNumber(String message) {
   }
 }
 
-void main() {
+double getDouble(String message) {
+  while (true) {
+    try {
+      return double.parse(getInput(message));
+    } catch (e) {
+      print('Please enter a valid number');
+    }
+  }
+}
+
+void main() async {
+  // Initialize Hive and load data before starting the application
+  print('Initializing database...');
+
+  bool databaseInitialized = false;
+
+  try {
+    await e_commerce.initializeApp();
+    print('Database initialized successfully!');
+    databaseInitialized = true;
+  } catch (e) {
+    print('Error initializing database: $e');
+
+    // Try to manually clean up lock files
+    try {
+      print('Attempting to clean up lock files...');
+      final hiveDir = Directory('hive_data');
+      if (hiveDir.existsSync()) {
+        for (var file in hiveDir.listSync()) {
+          if (file.path.endsWith('.lock')) {
+            try {
+              File(file.path).deleteSync();
+              print('Deleted lock file: ${file.path}');
+            } catch (e) {
+              print('Failed to delete lock file ${file.path}: $e');
+            }
+          }
+        }
+      }
+
+      print('Retrying database initialization...');
+      await e_commerce.initializeApp();
+      print('Database initialized successfully on second attempt!');
+      databaseInitialized = true;
+    } catch (retryError) {
+      print('Failed to initialize database on retry: $retryError');
+      print('Running with in-memory data only.');
+    }
+  }
+
   while (true) {
     print('\n=== Welcome to E-Commerce Console App ===');
     print('1. Login as Admin');
@@ -44,6 +97,17 @@ void main() {
         break;
       case '0':
         print('Thank you for using the app!');
+
+        // Close Hive boxes before exiting only if we successfully initialized
+        if (databaseInitialized) {
+          try {
+            await e_commerce.closeApp();
+            print('Database closed successfully.');
+          } catch (e) {
+            print('Error closing database: $e');
+          }
+        }
+
         return;
       default:
         print('Invalid choice, please try again');
@@ -56,11 +120,15 @@ void loginAdmin() {
   String password = getInput('Enter admin password: ');
 
   try {
-    var admin = e_commerce.adminsList.firstWhere(
-      (admin) => admin.email == email && admin.verifyPassword(password),
-    );
-    print('Welcome ${admin.name}!');
-    showAdminMenu();
+    // Use the function from e_commerce library that checks Hive first
+    bool success = e_commerce.loginAdmin(email, password);
+    if (success) {
+      var admin = e_commerce.currentUser;
+      print('Welcome ${admin?.name}!');
+      showAdminMenu();
+    } else {
+      print('Invalid credentials!');
+    }
   } catch (e) {
     print('Invalid credentials!');
   }
@@ -71,11 +139,15 @@ void loginUser() {
   String password = getInput('Enter user password: ');
 
   try {
-    var user = e_commerce.usersList.firstWhere(
-      (user) => user.email == email && user.verifyPassword(password),
-    );
-    print('Welcome ${user.name}!');
-    showUserMenu();
+    // Use the function from e_commerce library that checks Hive first
+    bool success = e_commerce.loginUser(email, password);
+    if (success) {
+      var user = e_commerce.currentUser;
+      print('Welcome ${user?.name}!');
+      showUserMenu();
+    } else {
+      print('Invalid credentials!');
+    }
   } catch (e) {
     print('Invalid credentials!');
   }
@@ -170,6 +242,7 @@ void showUserMenu() {
     print('5. Update Cart Item Quantity');
     print('6. Place Order');
     print('7. View Order History');
+    print('8. Pay for Order');
     print('0. Logout');
     print('===================');
 
@@ -197,6 +270,9 @@ void showUserMenu() {
       case '7':
         showOrderHistory();
         break;
+      case '8':
+        payForOrder();
+        break;
       case '0':
         return;
       default:
@@ -216,12 +292,17 @@ void showProducts() {
 }
 
 void addProduct() {
+  print('\n=== Add New Product ===');
   String name = getInput('Enter product name: ');
-  double price = double.parse(getInput('Enter product price: '));
+  double price = getDouble('Enter product price: ');
   String description = getInput('Enter product description: ');
 
-  e_commerce.addNewProduct(name, price, description);
-  print('Product added successfully!');
+  try {
+    e_commerce.addNewProduct(name, price, description);
+    print('Product added successfully!');
+  } catch (e) {
+    print('Error adding product: $e');
+  }
 }
 
 void updateProduct() {
@@ -235,6 +316,11 @@ void updateProduct() {
     product.name = name;
     product.price = price;
     product.description = description;
+
+    // حفظ التغييرات في قاعدة البيانات
+    final productsBox = Hive.box<Product>('products');
+    productsBox.put(id, product);
+
     print('Product updated successfully!');
   } else {
     print('Product not found!');
@@ -246,6 +332,11 @@ void deleteProduct() {
   var product = e_commerce.getProductById(id);
   if (product != null) {
     e_commerce.productsList.remove(product);
+
+    // حذف المنتج من قاعدة البيانات
+    final productsBox = Hive.box<Product>('products');
+    productsBox.delete(id);
+
     print('Product deleted successfully!');
   } else {
     print('Product not found!');
@@ -264,10 +355,15 @@ void showOrders() {
       print('Items:');
       for (var item in order.items) {
         print(
-            '- ${item.product.name} x ${item.quantity} = \$${item.product.price * item.quantity}');
+            '- ${item.product.name} x ${item.quantity} = \$${item.price * item.quantity}');
       }
       print('Total: \$${order.total}');
       print('Status: ${order.status}');
+      print('Paid: ${order.isPaid ? 'Yes' : 'No'}');
+      if (order.isPaid) {
+        print('Payment Method: ${order.paymentMethod}');
+        print('Payment Date: ${order.paymentDate?.toString().split('.')[0]}');
+      }
       print('-------------------');
     }
   }
@@ -327,7 +423,9 @@ void updateCartItem() {
 }
 
 void placeOrder() {
-  if (e_commerce.cart.items.isEmpty) {
+  var cartItems = e_commerce.getCartItems();
+
+  if (cartItems.isEmpty) {
     print('Cart is empty!');
     return;
   }
@@ -335,37 +433,168 @@ void placeOrder() {
   String name = getInput('Enter your name: ');
   String address = getInput('Enter your address: ');
 
+  List<OrderItem> orderItems = cartItems
+      .map((cartItem) => OrderItem(
+          product: cartItem.product,
+          quantity: cartItem.quantity,
+          price: cartItem.product.price))
+      .toList();
+
   Order order = Order(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       customerName: name,
       customerAddress: address,
-      items: List.from(e_commerce.cart.items),
-      total: e_commerce.cart.getTotal(),
+      items: orderItems,
+      total: e_commerce.getCartTotal(),
       status: 'Pending');
 
-  e_commerce.orders.add(order);
-  e_commerce.cart.items.clear();
-  print('Order placed successfully!');
-  print('Order ID: ${order.id}');
-  print('Total: \$${order.total}');
+  if (e_commerce.currentUser is Customer) {
+    var customer = e_commerce.currentUser as Customer;
+
+    // إضافة الطلب إلى قائمة الطلبات العامة
+    e_commerce.orders.add(order);
+
+    // إضافة الطلب إلى سجل العميل
+    customer.placeOrder(order);
+
+    // تفريغ السلة بعد إتمام الطلب
+    customer.cart.clear();
+
+    // حفظ الطلب في قاعدة البيانات
+    final ordersBox = Hive.box<Order>('orders');
+    ordersBox.put(order.id, order);
+
+    // تحديث بيانات العميل في قاعدة البيانات
+    final customersBox = Hive.box<Customer>('customers');
+    customersBox.put(customer.email, customer);
+
+    // Sync the current user to Hive using the library function
+    e_commerce.syncCurrentUserToHive();
+
+    print('Order placed successfully!');
+    print('Order ID: ${order.id}');
+    print('Total: \$${order.total}');
+  } else {
+    print('You need to be logged in as a customer to place an order.');
+  }
 }
 
 void showOrderHistory() {
   print('\n=== Order History ===');
-  if (e_commerce.orders.isEmpty) {
-    print('No orders found');
-  } else {
-    for (var order in e_commerce.orders) {
-      print('\nOrder ID: ${order.id}');
-      print('Customer: ${order.customerName}');
-      print('Address: ${order.customerAddress}');
-      print('Items:');
-      for (var item in order.items) {
-        print('- ${item.product.name} x ${item.quantity}');
+
+  if (e_commerce.currentUser is Customer) {
+    var customer = e_commerce.currentUser as Customer;
+    var userOrders = customer.orderHistory;
+
+    if (userOrders.isEmpty) {
+      print('No orders found in your history');
+    } else {
+      for (var order in userOrders) {
+        print('\nOrder ID: ${order.id}');
+        print('Customer: ${order.customerName}');
+        print('Address: ${order.customerAddress}');
+        print('Items:');
+        for (var item in order.items) {
+          print(
+              '- ${item.product.name} x ${item.quantity} = \$${item.price * item.quantity}');
+        }
+        print('Total: \$${order.total}');
+        print('Status: ${order.status}');
+        print('Paid: ${order.isPaid ? 'Yes' : 'No'}');
+        if (order.isPaid) {
+          print('Payment Method: ${order.paymentMethod}');
+          print('Payment Date: ${order.paymentDate?.toString().split('.')[0]}');
+        }
+        print('-------------------');
       }
-      print('Total: \$${order.total}');
-      print('Status: ${order.status}');
-      print('-------------------');
     }
+  } else {
+    print('You need to be logged in as a customer to view your order history.');
+  }
+}
+
+void payForOrder() {
+  print('\n=== Pay for Order ===');
+
+  if (e_commerce.currentUser is Customer) {
+    var customer = e_commerce.currentUser as Customer;
+
+    // عرض الطلبات غير المدفوعة من تاريخ طلبات المستخدم
+    var unpaidOrders =
+        customer.orderHistory.where((order) => !order.isPaid).toList();
+    if (unpaidOrders.isEmpty) {
+      print('No unpaid orders found!');
+      return;
+    }
+
+    print('Your unpaid orders:');
+    for (var order in unpaidOrders) {
+      print('${order.id}. Total: \$${order.total} - Status: ${order.status}');
+    }
+
+    // اختيار الطلب للدفع
+    String orderId = getInput('Enter order ID to pay (or 0 to cancel): ');
+    if (orderId == '0') return;
+
+    // البحث عن الطلب باستخدام الدالة المحسنة للبحث في النظام
+    Order? order = e_commerce.getOrderById(orderId);
+
+    if (order == null) {
+      print('Order not found!');
+      return;
+    }
+
+    if (order.isPaid) {
+      print('This order is already paid!');
+      return;
+    }
+
+    // اختيار طريقة الدفع
+    print('\nPayment Methods:');
+    print('1. Credit Card');
+    print('2. PayPal');
+    print('3. Cash on Delivery');
+
+    String paymentChoice = getInput('Choose payment method: ');
+    String paymentMethod;
+
+    switch (paymentChoice) {
+      case '1':
+        paymentMethod = 'Credit Card';
+        getInput('Enter card number: ');
+        getInput('Enter expiry date (MM/YY): ');
+        getInput('Enter CVV: ');
+        print('Processing credit card payment...');
+        break;
+      case '2':
+        paymentMethod = 'PayPal';
+        getInput('Enter PayPal email: ');
+        getInput('Enter PayPal password: ');
+        print('Processing PayPal payment...');
+        break;
+      case '3':
+        paymentMethod = 'Cash on Delivery';
+        print('Cash on delivery selected');
+        break;
+      default:
+        print('Invalid payment method!');
+        return;
+    }
+
+    // معالجة الدفع
+    bool success = e_commerce.processPayment(orderId, paymentMethod);
+
+    if (success) {
+      print('Payment processed successfully!');
+      print('Order status updated to: Paid');
+
+      // تحديث بيانات المستخدم في قاعدة البيانات
+      final customersBox = Hive.box<Customer>('customers');
+      customersBox.put(customer.email, customer);
+    } else {
+      print('Payment processing failed!');
+    }
+  } else {
+    print('You need to be logged in as a customer to pay for orders.');
   }
 }

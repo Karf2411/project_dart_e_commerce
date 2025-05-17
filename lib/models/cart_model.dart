@@ -1,6 +1,11 @@
+import 'package:hive/hive.dart';
 import 'cart_item_model.dart';
 
+part 'cart_model.g.dart';
+
+@HiveType(typeId: 5)
 class Cart {
+  @HiveField(0)
   final List<CartItem> items;
 
   Cart({required this.items});

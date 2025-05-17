@@ -1,27 +1,42 @@
+import 'package:hive/hive.dart';
 import 'address_model.dart';
 
+part 'user_model.g.dart';
+
+@HiveType(typeId: 2)
 class User {
+  @HiveField(0)
   final String name;
+
+  @HiveField(1)
   final int age;
+
+  @HiveField(2)
   final String email;
-  final String _password;
+
+  @HiveField(3)
+  final String password;
+
+  @HiveField(4)
   final Address address;
+
+  @HiveField(5)
   final String phone;
 
   User({
     required this.name,
     required this.age,
     required this.email,
-    required String password,
+    required this.password,
     required this.address,
     required this.phone,
-  }) : _password = password;
+  });
 
   // Verify password
-  bool verifyPassword(String password) => _password == password;
+  bool verifyPassword(String pwd) => password == pwd;
 
   // Get masked password for display
-  String get maskedPassword => '*' * _password.length;
+  String get maskedPassword => '*' * password.length;
 
   @override
   String toString() => '''

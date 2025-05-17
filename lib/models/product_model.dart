@@ -1,12 +1,23 @@
-import 'review_model.dart';
+import 'package:hive/hive.dart';
 
+part 'product_model.g.dart';
+
+@HiveType(typeId: 4)
 class Product {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   String name;
+
+  @HiveField(2)
   double price;
+
+  @HiveField(3)
   String description;
+
+  @HiveField(4)
   String imageUrl;
-  List<Review> reviews = [];
 
   Product({
     required this.id,
@@ -16,19 +27,21 @@ class Product {
     required this.imageUrl,
   });
 
-  void addReview(Review review) {
-    reviews.add(review);
-  }
-
-  double get averageRating {
-    if (reviews.isEmpty) return 0.0;
-    return reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-        reviews.length;
+  void updateDetails({
+    String? newName,
+    double? newPrice,
+    String? newDescription,
+    String? newImageUrl,
+  }) {
+    if (newName != null) name = newName;
+    if (newPrice != null) price = newPrice;
+    if (newDescription != null) description = newDescription;
+    if (newImageUrl != null) imageUrl = newImageUrl;
   }
 
   // Calculate total price for a given quantity
   double getTotalPrice(int quantity) => price * quantity;
 
   @override
-  String toString() => '$name - \$$price';
+  String toString() => "$name - \$$price";
 }
